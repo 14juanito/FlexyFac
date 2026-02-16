@@ -1,142 +1,87 @@
+const bcrypt = require('bcrypt');
 const db = require('../config/database');
-const { 
-  extractFacultyFromMatricule, 
-  extractPromotionYear,
-  validateMatriculeFormat 
-} = require('../utils/facultyExtractor');
 
-/**
- * Connexion d'un étudiant par matricule uniquement
- * Route: POST /api/auth/login
- */
+// Inscription d'un nouvel étudiant
+exports.register = async (req, res) => {
+  try {
+    const { matricule, nom, prenom, email, mot_de_passe, promotion } = req.body;
+    
+    // Vérifier si l'étudiant existe déjà
+    const existingStudent = await db.get('SELECT * FROM Etudiants WHERE matricule = ? OR email = ?', [matricule, email]);
+    if (existingStudent) {
+      return res.status(400).json({ error: 'Matricule ou email déjà utilisé' });
+    }
+
+    // Hasher le mot de passe
+    const hashedPassword = await bcrypt.hash(mot_de_passe, 10);
+
+    // Insérer le nouvel étudiant
+    const result = await db.run(
+      'INSERT INTO Etudiants (matricule, nom, prenom, email, mot_de_passe, promotion) VALUES (?, ?, ?, ?, ?, ?)',
+      [matricule, nom, prenom, email, hashedPassword, promotion]
+    );
+
+    res.status(201).json({ 
+      message: 'Compte créé avec succès',
+      etudiant: { id: result.lastID, matricule, nom, prenom, email, promotion }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Erreur lors de la création du compte' });
+  }
+};
+
+// Connexion avec matricule seulement (authentification simplifiée)
 exports.login = async (req, res) => {
   try {
     const { matricule } = req.body;
 
-    // Validation du matricule
     if (!matricule) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Le matricule est requis' 
-      });
+      return res.status(400).json({ error: 'Matricule requis' });
     }
 
-    if (!validateMatriculeFormat(matricule)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Format de matricule invalide' 
-      });
+    // Récupérer l'étudiant
+    const [etudiantResult] = await db.query('SELECT * FROM Etudiants WHERE matricule = ?', [matricule]);
+    if (!etudiantResult || etudiantResult.length === 0) {
+      return res.status(404).json({ error: 'Matricule non trouvé' });
     }
 
-    // Recherche de l'étudiant en base de données
-    const [rows] = await db.query(
-      'SELECT id, matricule, nom, prenom, email, date_naissance FROM Etudiants WHERE matricule = ?',
-      [matricule]
-    );
+    const studentData = etudiantResult[0];
 
-    if (rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Matricule non trouvé' 
-      });
-    }
+    // Extraire la faculté du matricule
+    const faculteCode = matricule.substring(0, 2);
+    const faculteMap = {
+      'SI': 'Sciences Informatiques',
+      'DR': 'Droit', 
+      'MD': 'Médecine',
+      'GC': 'Génie Civil',
+      'EC': 'Économie'
+    };
+    const faculte = faculteMap[faculteCode] || 'Inconnue';
 
-    const etudiant = rows[0];
+    // Récupérer les types de frais pour cette faculté
+    const [typesFraisResult] = await db.query('SELECT * FROM TypesFrais WHERE faculte = ? AND actif = 1', [faculte]);
+    const typesFrais = typesFraisResult || [];
 
-    // Extraction intelligente de la faculté et promotion
-    const faculte = extractFacultyFromMatricule(matricule);
-    const promotion = extractPromotionYear(matricule);
+    // Récupérer le taux de change actuel
+    const [tauxChangeResult] = await db.query('SELECT taux_usd_cdf FROM TauxChange WHERE actif = 1 ORDER BY date_maj DESC LIMIT 1');
+    const tauxChange = tauxChangeResult?.[0];
 
-    // Réponse avec les informations de l'étudiant
     res.json({
       success: true,
-      message: 'Connexion réussie',
-      data: {
-        id: etudiant.id,
-        matricule: etudiant.matricule,
-        nom: etudiant.nom,
-        prenom: etudiant.prenom,
-        email: etudiant.email,
-        faculte,
-        promotion,
-        date_naissance: etudiant.date_naissance
-      }
+      etudiant: {
+        id: studentData.id,
+        matricule: studentData.matricule,
+        nom: studentData.nom,
+        prenom: studentData.prenom,
+        email: studentData.email,
+        promotion: studentData.promotion,
+        faculte
+      },
+      typesFrais,
+      tauxChange: tauxChange?.taux_usd_cdf || 2650
     });
-
   } catch (error) {
     console.error('Erreur login:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Erreur lors de la connexion' 
-    });
-  }
-};
-
-/**
- * Vérification d'un matricule et récupération des frais associés
- * Route: GET /api/auth/check-matricule/:matricule
- */
-exports.checkMatricule = async (req, res) => {
-  try {
-    const { matricule } = req.params;
-
-    // Validation du format
-    if (!validateMatriculeFormat(matricule)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Format de matricule invalide' 
-      });
-    }
-
-    // Vérification de l'existence en BDD
-    const [etudiantRows] = await db.query(
-      'SELECT id, matricule, nom, prenom, email FROM Etudiants WHERE matricule = ?',
-      [matricule]
-    );
-
-    if (etudiantRows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Matricule non trouvé' 
-      });
-    }
-
-    const etudiant = etudiantRows[0];
-    const faculte = extractFacultyFromMatricule(matricule);
-
-    if (!faculte) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Impossible de déterminer la faculté' 
-      });
-    }
-
-    // Récupération des frais associés à la faculté
-    const [fraisRows] = await db.query(
-      'SELECT id, faculte, montant, description FROM Frais WHERE faculte = ?',
-      [faculte]
-    );
-
-    res.json({
-      success: true,
-      data: {
-        etudiant: {
-          id: etudiant.id,
-          matricule: etudiant.matricule,
-          nom: etudiant.nom,
-          prenom: etudiant.prenom,
-          email: etudiant.email
-        },
-        faculte,
-        frais: fraisRows
-      }
-    });
-
-  } catch (error) {
-    console.error('Erreur check-matricule:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Erreur lors de la vérification' 
-    });
+    res.status(500).json({ error: 'Erreur lors de la connexion' });
   }
 };

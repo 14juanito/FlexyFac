@@ -1,12 +1,6 @@
-// Contrôleur pour /api/check-matricule
-const db = require('../config/db'); // Connexion MySQL
+const db = require('../config/database');
 const extractFaculte = require('../utils/extractFaculte');
 
-/**
- * Contrôle la validation du matricule et renvoie faculté + frais
- * @param {*} req
- * @param {*} res
- */
 exports.checkMatriculeController = async (req, res) => {
   try {
     const { matricule } = req.body;
@@ -27,12 +21,11 @@ exports.checkMatriculeController = async (req, res) => {
     }
 
     // Recherche frais associés
-    const [frais] = await db.query('SELECT * FROM Frais WHERE faculte = ?', [faculte]);
+    const [frais] = await db.query('SELECT * FROM TypesFrais WHERE faculte = ? AND actif = 1', [faculte]);
     if (frais.length === 0) {
       return res.status(404).json({ error: 'Aucun frais pour cette faculté.' });
     }
 
-    // Réponse
     res.json({
       etudiant: etudiants[0],
       faculte,

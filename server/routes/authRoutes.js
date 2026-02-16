@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
 
-// POST /api/auth/login - Connexion par matricule
-router.post('/login', authController.login);
+// POST /api/auth/register - Inscription
+router.post('/register', authController.register);
 
-// GET /api/auth/check-matricule/:matricule - Vérification et récupération des frais
-router.get('/check-matricule/:matricule', authController.checkMatricule);
+// POST /api/auth/login - Connexion par matricule et mot de passe
+router.post('/login', authController.login);
 
 module.exports = router;
