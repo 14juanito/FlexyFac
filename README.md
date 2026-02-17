@@ -84,11 +84,60 @@ Voir [DEPLOIEMENT.md](DEPLOIEMENT.md) pour les détails.
 
 ## 📝 Roadmap
 
-- [x] Sprint 1 : Authentification + Reconnaissance intelligente
-- [ ] Sprint 2 : Logique métier (calcul frais)
-- [ ] Sprint 3 : Génération PDF + QR Code
-- [ ] Sprint 4 : Simulation paiement
-- [ ] Sprint 5 : Dashboard React
+- [x] **Sprint 1** : Authentification + Reconnaissance intelligente ✅
+- [x] **Sprint 2** : Logique métier (calcul frais avancé) ✅
+- [x] **Sprint 3** : Génération PDF + QR Code ✅
+- [x] **Sprint 4** : Simulation paiement avancée ✅
+- [ ] **Sprint 5** : Dashboard React (en cours)
+
+## 🆕 Nouvelles Fonctionnalités
+
+### 🧠 Logique Métier Avancée
+- ✅ Calcul intelligent des frais avec statut de paiement
+- ✅ Validation automatique des montants
+- ✅ Gestion des paiements partiels
+- ✅ Prévention des sur-paiements
+- ✅ Statistiques détaillées par étudiant
+
+### 📄 Génération PDF + QR Code
+- ✅ Reçus PDF professionnels avec QR Code
+- ✅ Vérification d'authenticité via QR Code
+- ✅ Bons de paiement physiques
+- ✅ Téléchargement sécurisé des documents
+
+### 💳 Paiements Avancés
+- ✅ Simulation réaliste selon le mode de paiement
+- ✅ Gestion des bons physiques avec expiration
+- ✅ Validation administrative des bons
+- ✅ Historique paginé avec filtres
+
+## 🚀 Démarrage Complet
+
+```bash
+# Démarrage automatisé complet
+start-complete.bat
+
+# Ou étape par étape
+cd server
+npm install
+node init-advanced-db.js
+npm run dev
+```
+
+## 📡 Nouvelles API
+
+### Frais Avancés
+- `GET /api/frais/:matricule` - Calcul frais avec statuts
+- `POST /api/frais/paiement` - Paiement avec validation
+- `POST /api/frais/bon` - Génération bon physique
+- `GET /api/frais/historique/:etudiant_id` - Historique paginé
+
+### PDF et QR Codes
+- `POST /api/pdf/recu/:paiementId` - Générer reçu PDF
+- `GET /api/pdf/download/:fileName` - Télécharger PDF
+- `GET /api/pdf/verify/:paiementId` - Vérifier via QR Code
+
+Voir [API-DOCUMENTATION.md](API-DOCUMENTATION.md) pour les détails complets.
 
 ## 👥 Contributeurs
 

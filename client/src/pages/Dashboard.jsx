@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { authService } from '../services/api';
 import PaymentForm from '../components/PaymentForm';
+import GenerateBonForm from '../components/GenerateBonForm';
 import PaymentConfirmation from '../components/PaymentConfirmation';
 import PaymentSuccess from '../components/PaymentSuccess';
 import toast, { Toaster } from 'react-hot-toast';
@@ -21,28 +22,80 @@ import toast, { Toaster } from 'react-hot-toast';
 export default function Dashboard({ user, onLogout }) {
   const [frais, setFrais] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [showGenerateBon, setShowGenerateBon] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [paymentData, setPaymentData] = useState(null);
+  const [etudiant, setEtudiant] = useState(user || {});
 
   useEffect(() => {
-    loadFrais();
-  }, [user.matricule]);
+    setEtudiant(user || {});
+    if (user?.matricule || user?.etudiant?.matricule) {
+      loadFrais();
+    }
+  }, [user]);
 
   const loadFrais = async () => {
+    const matricule = user?.matricule || user?.etudiant?.matricule;
+    if (!matricule || matricule === 'undefined') {
+      console.error('Matricule manquant pour charger les frais');
+      setLoading(false);
+      return;
+    }
     try {
-      const data = await authService.checkMatricule(user.matricule);
-      setFrais(data.data.frais);
+      const data = await authService.getFrais(matricule);
+      if (data.success) {
+        setFrais(data.frais || []);
+
+        // Mettre à jour les infos étudiant avec les dernières données backend
+        const mergedUser = {
+          ...user,
+          ...data.etudiant,
+          faculte: data.etudiant?.faculte || user?.faculte,
+          promotion: data.etudiant?.promotion || user?.promotion,
+          typesFrais: data.frais || user?.typesFrais || [],
+          tauxChange: data.tauxChange || user?.tauxChange || 2850
+        };
+
+        setEtudiant(mergedUser);
+        // Synchroniser le stockage local pour les prochaines sessions
+        try {
+          localStorage.setItem('user', JSON.stringify(mergedUser));
+        } catch (e) {
+          console.warn('Impossible de mettre à jour la session locale:', e);
+        }
+      } else {
+        // Fallback: utiliser les typesFrais retournés lors de la connexion
+        const sourceUser = etudiant || user || {};
+        if (sourceUser.typesFrais && sourceUser.typesFrais.length > 0) {
+          setFrais(sourceUser.typesFrais.map(f => ({
+            ...f,
+            montant: f.montant_usd,
+            montant_usd: f.montant_usd,
+            description: f.description || f.nom
+          })));
+        }
+      }
     } catch (error) {
       console.error('Erreur chargement frais:', error);
-      toast.error('Erreur lors du chargement des frais');
+      // Fallback: utiliser les typesFrais retournés lors de la connexion
+      const sourceUser = etudiant || user || {};
+      if (sourceUser.typesFrais && sourceUser.typesFrais.length > 0) {
+        setFrais(sourceUser.typesFrais.map(f => ({
+          ...f,
+          montant: f.montant_usd,
+          montant_usd: f.montant_usd,
+          description: f.description || f.nom
+        })));
+      } else {
+        toast.error('Erreur lors du chargement des frais');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const totalFrais = frais.reduce((sum, f) => sum + parseFloat(f.montant), 0);
+  const totalFrais = frais.reduce((sum, f) => sum + parseFloat(f.montant_usd || 0), 0);
 
   const handlePaymentFormSubmit = (formData) => {
     setPaymentData(formData);
@@ -66,8 +119,8 @@ export default function Dashboard({ user, onLogout }) {
 
   const handlePaySingleFee = (fee) => {
     setPaymentData({
-      matricule: user.matricule,
-      nomComplet: `${user.prenom} ${user.nom}`,
+      matricule: etudiant.matricule,
+      nomComplet: `${etudiant.prenom} ${etudiant.nom}`,
       typePaiement: 'frais_academique',
       montant: fee.montant,
       modePaiement: 'mobile_money'
@@ -122,20 +175,20 @@ export default function Dashboard({ user, onLogout }) {
               </div>
               <div>
                 <h2 className="text-2xl font-bold mb-1">
-                  {user.prenom} {user.nom}
+                  {etudiant.prenom} {etudiant.nom}
                 </h2>
                 <p className="text-primary-100 mb-3 flex items-center gap-2">
                   <Building size={16} />
-                  Matricule: {user.matricule}
+                  Matricule: {etudiant.matricule}
                 </p>
                 <div className="flex gap-3">
                   <span className="bg-white bg-opacity-20 text-white px-3 py-1 rounded-full text-sm font-medium flex items-center gap-2">
                     <GraduationCap size={14} />
-                    {user.faculte}
+                    {etudiant.faculte}
                   </span>
                   <span className="bg-white bg-opacity-20 text-white px-3 py-1 rounded-full text-sm font-medium flex items-center gap-2">
                     <Calendar size={14} />
-                    Promotion {user.promotion}
+                    Promotion {etudiant.promotion || (etudiant.faculte === 'Sciences Informatiques' ? 'L1(LMD)FASI' : '2024-2025')}
                   </span>
                 </div>
               </div>
@@ -144,7 +197,7 @@ export default function Dashboard({ user, onLogout }) {
               <p className="text-primary-100 text-sm mb-1">Total à payer</p>
               <p className="text-3xl font-bold flex items-center gap-2">
                 <DollarSign size={28} />
-                {totalFrais.toLocaleString()} FC
+                {totalFrais.toLocaleString()} 
               </p>
             </div>
           </div>
@@ -155,17 +208,17 @@ export default function Dashboard({ user, onLogout }) {
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.2 }}
-          className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8"
+          className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8"
         >
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => setShowPaymentForm(true)}
-            className="card hover:shadow-xl transition-all duration-200 p-6 text-center border-2 border-dashed border-primary-300 hover:border-primary-500"
+            onClick={() => setShowGenerateBon(true)}
+            className="card hover:shadow-xl transition-all duration-200 p-6 text-center border-2 border-dashed border-orange-300 hover:border-orange-500"
           >
-            <Plus className="text-primary-600 mx-auto mb-3" size={32} />
-            <h3 className="font-semibold text-gray-900 mb-1">Nouveau Paiement</h3>
-            <p className="text-sm text-gray-600">Générer un bon de paiement</p>
+            <FileText className="text-orange-600 mx-auto mb-3" size={32} />
+            <h3 className="font-semibold text-gray-900 mb-1">Bon de Paiement</h3>
+            <p className="text-sm text-gray-600">Paiement à la banque</p>
           </motion.button>
 
           <motion.button
@@ -173,17 +226,7 @@ export default function Dashboard({ user, onLogout }) {
             whileTap={{ scale: 0.98 }}
             className="card hover:shadow-xl transition-all duration-200 p-6 text-center"
           >
-            <CreditCard className="text-success-600 mx-auto mb-3" size={32} />
-            <h3 className="font-semibold text-gray-900 mb-1">Payer Tout</h3>
-            <p className="text-sm text-gray-600">{totalFrais.toLocaleString()} FCFA</p>
-          </motion.button>
-
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="card hover:shadow-xl transition-all duration-200 p-6 text-center"
-          >
-            <Download className="text-warning-600 mx-auto mb-3" size={32} />
+            <Download className="text-blue-600 mx-auto mb-3" size={32} />
             <h3 className="font-semibold text-gray-900 mb-1">Télécharger</h3>
             <p className="text-sm text-gray-600">Relevé des frais</p>
           </motion.button>
@@ -228,17 +271,17 @@ export default function Dashboard({ user, onLogout }) {
                       <DollarSign className="text-primary-600" size={20} />
                     </div>
                     <div>
-                      <h4 className="font-semibold text-gray-900">{f.description}</h4>
+                      <h4 className="font-semibold text-gray-900">{f.nom}</h4>
                       <p className="text-sm text-gray-600 flex items-center gap-2">
                         <Building size={14} />
-                        {f.faculte}
+                        {f.description}
                       </p>
                     </div>
                   </div>
                   <div className="text-right flex items-center gap-4">
                     <div>
                       <p className="text-lg font-bold text-gray-900">
-                        {parseFloat(f.montant).toLocaleString()} FC
+                        ${parseFloat(f.montant_usd || 0).toFixed(2)}
                       </p>
                       <p className="text-sm text-gray-500">À payer</p>
                     </div>
@@ -260,11 +303,34 @@ export default function Dashboard({ user, onLogout }) {
 
       {/* Modals */}
       <AnimatePresence>
-        {showPaymentForm && (
-          <PaymentForm
-            onClose={() => setShowPaymentForm(false)}
-            onSubmit={handlePaymentFormSubmit}
-          />
+        {showGenerateBon && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+            >
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold">Générer Bon de Paiement</h2>
+                  <button
+                    onClick={() => setShowGenerateBon(false)}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    ✕
+                  </button>
+                </div>
+                
+                <GenerateBonForm 
+                  user={etudiant} 
+                  onBonGenerated={() => {
+                    setShowGenerateBon(false);
+                  }}
+                />
+              </div>
+            </motion.div>
+          </div>
         )}
         
         {showConfirmation && paymentData && (

@@ -1,4 +1,4 @@
-const db = require('../config/database');
+const { getDb } = require('../config/database');
 const extractFaculte = require('../utils/extractFaculte');
 
 exports.checkMatriculeController = async (req, res) => {
@@ -8,9 +8,14 @@ exports.checkMatriculeController = async (req, res) => {
       return res.status(400).json({ error: 'Matricule requis.' });
     }
 
+    const db = getDb();
+    if (!db) {
+      return res.status(500).json({ error: 'Base de données non disponible' });
+    }
+
     // Recherche étudiant
-    const [etudiants] = await db.query('SELECT * FROM Etudiants WHERE matricule = ?', [matricule]);
-    if (etudiants.length === 0) {
+    const etudiant = db.prepare('SELECT * FROM Etudiants WHERE matricule = ?').get(matricule);
+    if (!etudiant) {
       return res.status(404).json({ error: 'Matricule non trouvé.' });
     }
 
@@ -21,13 +26,10 @@ exports.checkMatriculeController = async (req, res) => {
     }
 
     // Recherche frais associés
-    const [frais] = await db.query('SELECT * FROM TypesFrais WHERE faculte = ? AND actif = 1', [faculte]);
-    if (frais.length === 0) {
-      return res.status(404).json({ error: 'Aucun frais pour cette faculté.' });
-    }
-
+    const frais = db.prepare('SELECT * FROM TypesFrais WHERE faculte = ? AND actif = 1').all(faculte);
+    
     res.json({
-      etudiant: etudiants[0],
+      etudiant,
       faculte,
       frais
     });

@@ -17,8 +17,14 @@ export default function Login({ onLogin }) {
     try {
       const data = await authService.login(matricule);
       if (data.success) {
+        // Combiner les données de l'étudiant avec typesFrais et tauxChange
+        const userData = {
+          ...data.etudiant,
+          typesFrais: data.typesFrais || [],
+          tauxChange: data.tauxChange || 2850
+        };
         toast.success('Connexion réussie!');
-        setTimeout(() => onLogin(data), 500);
+        setTimeout(() => onLogin(userData), 500);
       }
     } catch (err) {
       const errorMsg = err.response?.data?.message || 'Erreur de connexion';

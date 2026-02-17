@@ -1,32 +1,61 @@
 const bcrypt = require('bcrypt');
-const db = require('../config/database');
+const { getDb } = require('../config/database');
 
 // Inscription d'un nouvel étudiant
 exports.register = async (req, res) => {
   try {
-    const { matricule, nom, prenom, email, mot_de_passe, promotion } = req.body;
-    
+    const { nom, prenom, matricule, email, password } = req.body;
+
+    if (!nom || !prenom || !matricule || !email || !password) {
+      return res.status(400).json({ error: 'Tous les champs sont requis' });
+    }
+
+    const db = getDb();
+    if (!db) {
+      return res.status(500).json({ error: 'Base de données non disponible' });
+    }
+
     // Vérifier si l'étudiant existe déjà
-    const existingStudent = await db.get('SELECT * FROM Etudiants WHERE matricule = ? OR email = ?', [matricule, email]);
+    const existingStudent = db.prepare('SELECT id FROM Etudiants WHERE matricule = ? OR email = ?').get(matricule, email);
     if (existingStudent) {
-      return res.status(400).json({ error: 'Matricule ou email déjà utilisé' });
+      return res.status(409).json({ error: 'Matricule ou email déjà utilisé' });
     }
 
     // Hasher le mot de passe
-    const hashedPassword = await bcrypt.hash(mot_de_passe, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Extraire la faculté du matricule
+    const faculteCode = matricule.substring(0, 2);
+    const faculteMap = {
+      'SI': 'Sciences Informatiques',
+      'DR': 'Droit', 
+      'MD': 'Médecine',
+      'GC': 'Génie Civil',
+      'EC': 'Économie'
+    };
+    const faculte = faculteMap[faculteCode] || 'Inconnue';
 
     // Insérer le nouvel étudiant
-    const result = await db.run(
-      'INSERT INTO Etudiants (matricule, nom, prenom, email, mot_de_passe, promotion) VALUES (?, ?, ?, ?, ?, ?)',
-      [matricule, nom, prenom, email, hashedPassword, promotion]
-    );
+    const result = db.prepare(`
+      INSERT INTO Etudiants (nom, prenom, matricule, email, password, faculte)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(nom, prenom, matricule, email, hashedPassword, faculte);
 
-    res.status(201).json({ 
-      message: 'Compte créé avec succès',
-      etudiant: { id: result.lastID, matricule, nom, prenom, email, promotion }
+    res.status(201).json({
+      success: true,
+      message: 'Étudiant inscrit avec succès',
+      etudiant: {
+        id: result.lastInsertRowid,
+        matricule,
+        nom,
+        prenom,
+        email,
+        faculte
+      }
     });
   } catch (error) {
-    res.status(500).json({ error: 'Erreur lors de la création du compte' });
+    console.error('Erreur inscription:', error);
+    res.status(500).json({ error: 'Erreur lors de l\'inscription' });
   }
 };
 
@@ -39,13 +68,17 @@ exports.login = async (req, res) => {
       return res.status(400).json({ error: 'Matricule requis' });
     }
 
-    // Récupérer l'étudiant
-    const [etudiantResult] = await db.query('SELECT * FROM Etudiants WHERE matricule = ?', [matricule]);
-    if (!etudiantResult || etudiantResult.length === 0) {
-      return res.status(404).json({ error: 'Matricule non trouvé' });
+    const db = getDb();
+    if (!db) {
+      return res.status(500).json({ error: 'Base de données non disponible' });
     }
 
-    const studentData = etudiantResult[0];
+    // Récupérer l'étudiant
+    const stmt = db.prepare('SELECT * FROM Etudiants WHERE matricule = ?');
+    const studentData = stmt.get(matricule);
+    if (!studentData) {
+      return res.status(404).json({ error: 'Matricule non trouvé' });
+    }
 
     // Extraire la faculté du matricule
     const faculteCode = matricule.substring(0, 2);
@@ -59,12 +92,16 @@ exports.login = async (req, res) => {
     const faculte = faculteMap[faculteCode] || 'Inconnue';
 
     // Récupérer les types de frais pour cette faculté
-    const [typesFraisResult] = await db.query('SELECT * FROM TypesFrais WHERE faculte = ? AND actif = 1', [faculte]);
-    const typesFrais = typesFraisResult || [];
+    const typesFrais = db.prepare('SELECT * FROM TypesFrais WHERE faculte = ? AND actif = 1').all(faculte);
 
     // Récupérer le taux de change actuel
-    const [tauxChangeResult] = await db.query('SELECT taux_usd_cdf FROM TauxChange WHERE actif = 1 ORDER BY date_maj DESC LIMIT 1');
-    const tauxChange = tauxChangeResult?.[0];
+    let tauxChange = 2850;
+    try {
+      const tauxResult = db.prepare('SELECT valeur FROM Config WHERE cle = ? AND actif = 1').get('taux_usd_cdf');
+      tauxChange = tauxResult ? parseFloat(tauxResult.valeur) : 2850;
+    } catch (e) {
+      // Table Config n'existe pas encore
+    }
 
     res.json({
       success: true,
@@ -78,7 +115,7 @@ exports.login = async (req, res) => {
         faculte
       },
       typesFrais,
-      tauxChange: tauxChange?.taux_usd_cdf || 2650
+      tauxChange
     });
   } catch (error) {
     console.error('Erreur login:', error);

@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Génération Bons PDF - FlexyFac</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1a365d;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #2d3748;
+        }
+        select, input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            background: #c53030;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #9c2626;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            display: none;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .bon-info {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            color: #0d47a1;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 15px;
+        }
+        .download-btn {
+            background: #28a745;
+            margin-top: 10px;
+            width: auto;
+            display: inline-block;
+            padding: 8px 20px;
+        }
+        .download-btn:hover {
+            background: #218838;
+        }
+        .loading {
+            text-align: center;
+            color: #666;
+        }
+        .bons-list {
+            margin-top: 30px;
+        }
+        .bon-item {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+        .bon-header {
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 5px;
+        }
+        .bon-details {
+            font-size: 14px;
+            color: #6c757d;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status-en-attente {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status-valide {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-expire {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎓 Test Génération Bons PDF - FlexyFac</h1>
+        
+        <form id="bonForm">
+            <div class="form-group">
+                <label for="etudiant">Étudiant:</label>
+                <select id="etudiant" required>
+                    <option value="">Sélectionner un étudiant...</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="typeFrais">Type de frais:</label>
+                <select id="typeFrais" required>
+                    <option value="">Sélectionner un type de frais...</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="montant">Montant (USD):</label>
+                <input type="number" id="montant" step="0.01" min="0" required>
+            </div>
+            
+            <button type="submit" id="generateBtn">📄 Générer le Bon PDF</button>
+        </form>
+        
+        <div id="result" class="result"></div>
+        
+        <div class="bons-list">
+            <h3>📋 Bons générés</h3>
+            <button type="button" id="refreshBtn">🔄 Actualiser la liste</button>
+            <div id="bonsList"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000/api';
+        
+        // Charger les données initiales
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadEtudiants();
+            await loadTypesFrais();
+        });
+        
+        // Charger la liste des étudiants
+        async function loadEtudiants() {
+            try {
+                // Simuler des étudiants (en réalité, il faudrait une API pour les lister)
+                const etudiants = [
+                    { id: 1, nom: 'MUKENDI Jean', matricule: 'SI2024001', faculte: 'Sciences Informatiques' },
+                    { id: 2, nom: 'TSHIMANGA Marie', matricule: 'DR2024002', faculte: 'Droit' },
+                    { id: 3, nom: 'KABONGO Pierre', matricule: 'MD2024003', faculte: 'Médecine' },
+                    { id: 4, nom: 'MWAMBA Grace', matricule: 'GC2024004', faculte: 'Génie Civil' },
+                    { id: 5, nom: 'ILUNGA David', matricule: 'EC2024005', faculte: 'Économie' }
+                ];
+                
+                const select = document.getElementById('etudiant');
+                etudiants.forEach(etudiant => {
+                    const option = document.createElement('option');
+                    option.value = etudiant.id;
+                    option.textContent = `${etudiant.nom} (${etudiant.matricule}) - ${etudiant.faculte}`;
+                    option.dataset.faculte = etudiant.faculte;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Erreur chargement étudiants:', error);
+            }
+        }
+        
+        // Charger les types de frais
+        async function loadTypesFrais() {
+            try {
+                // Simuler des types de frais
+                const typesFrais = [
+                    { id: 1, nom: 'Frais d\'inscription', montant_usd: 150, faculte: 'Sciences Informatiques' },
+                    { id: 2, nom: 'Frais de laboratoire', montant_usd: 80, faculte: 'Sciences Informatiques' },
+                    { id: 3, nom: 'Frais d\'inscription', montant_usd: 120, faculte: 'Droit' },
+                    { id: 4, nom: 'Frais d\'inscription', montant_usd: 200, faculte: 'Médecine' }
+                ];
+                
+                const select = document.getElementById('typeFrais');
+                typesFrais.forEach(frais => {
+                    const option = document.createElement('option');
+                    option.value = frais.id;
+                    option.textContent = `${frais.nom} - $${frais.montant_usd} (${frais.faculte})`;
+                    option.dataset.montant = frais.montant_usd;
+                    option.dataset.faculte = frais.faculte;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Erreur chargement types de frais:', error);
+            }
+        }
+        
+        // Mettre à jour le montant quand on sélectionne un type de frais
+        document.getElementById('typeFrais').addEventListener('change', (e) => {
+            const selectedOption = e.target.selectedOptions[0];
+            if (selectedOption && selectedOption.dataset.montant) {
+                document.getElementById('montant').value = selectedOption.dataset.montant;
+            }
+        });
+        
+        // Gérer la soumission du formulaire
+        document.getElementById('bonForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const etudiantId = document.getElementById('etudiant').value;
+            const typeFraisId = document.getElementById('typeFrais').value;
+            const montant = parseFloat(document.getElementById('montant').value);
+            
+            if (!etudiantId || !typeFraisId || !montant) {
+                showResult('Veuillez remplir tous les champs', 'error');
+                return;
+            }
+            
+            const btn = document.getElementById('generateBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Génération en cours...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/pdf-bon/generer`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        etudiant_id: parseInt(etudiantId),
+                        type_frais_id: parseInt(typeFraisId),
+                        montant_usd: montant
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showBonResult(data.bon);
+                    await loadBonsList(etudiantId);
+                } else {
+                    showResult(data.error || 'Erreur lors de la génération', 'error');
+                }
+            } catch (error) {
+                showResult('Erreur de connexion au serveur', 'error');
+                console.error('Erreur:', error);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '📄 Générer le Bon PDF';
+            }
+        });
+        
+        // Afficher le résultat de génération
+        function showBonResult(bon) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.className = 'result success';
+            resultDiv.style.display = 'block';
+            
+            resultDiv.innerHTML = `
+                <h3>✅ Bon généré avec succès!</h3>
+                <div class="bon-info">
+                    <p><strong>🆔 ID du bon:</strong> ${bon.bon_id}</p>
+                    <p><strong>👤 Étudiant:</strong> ${bon.etudiant.nom} (${bon.etudiant.matricule})</p>
+                    <p><strong>💰 Frais:</strong> ${bon.frais.nom}</p>
+                    <p><strong>💵 Montant:</strong> $${bon.montant.usd} (${bon.montant.cdf.toLocaleString()} CDF)</p>
+                    <p><strong>📅 Expire le:</strong> ${new Date(bon.dates.expiration).toLocaleDateString('fr-FR')}</p>
+                    <button class="download-btn" onclick="downloadBon('${bon.fileName}')">
+                        📥 Télécharger le PDF
+                    </button>
+                </div>
+            `;
+        }
+        
+        // Afficher un message de résultat
+        function showResult(message, type) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.className = `result ${type}`;
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = `<p>${message}</p>`;
+        }
+        
+        // Télécharger un bon
+        function downloadBon(fileName) {
+            window.open(`${API_BASE}/pdf-bon/download/${fileName}`, '_blank');
+        }
+        
+        // Charger la liste des bons
+        async function loadBonsList(etudiantId) {
+            if (!etudiantId) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/pdf-bon/etudiant/${etudiantId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayBonsList(data.bons);
+                }
+            } catch (error) {
+                console.error('Erreur chargement bons:', error);
+            }
+        }
+        
+        // Afficher la liste des bons
+        function displayBonsList(bons) {
+            const listDiv = document.getElementById('bonsList');
+            
+            if (bons.length === 0) {
+                listDiv.innerHTML = '<p>Aucun bon généré pour cet étudiant.</p>';
+                return;
+            }
+            
+            listDiv.innerHTML = bons.map(bon => {
+                const statusClass = bon.statut === 'VALIDE' ? 'status-valide' : 
+                                  bon.expire_bientot ? 'status-expire' : 'status-en-attente';
+                const statusText = bon.statut === 'VALIDE' ? 'Validé' : 
+                                 bon.expire_bientot ? 'Expire bientôt' : 'En attente';
+                
+                return `
+                    <div class="bon-item">
+                        <div class="bon-header">
+                            🆔 ${bon.bon_id} 
+                            <span class="status-badge ${statusClass}">${statusText}</span>
+                        </div>
+                        <div class="bon-details">
+                            💰 ${bon.type_frais_nom} - $${bon.montant_usd} (${bon.montant_cdf.toLocaleString()} CDF)<br>
+                            📅 Généré le ${new Date(bon.date_paiement).toLocaleDateString('fr-FR')}<br>
+                            ⏰ Expire le ${new Date(bon.date_expiration).toLocaleDateString('fr-FR')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // Actualiser la liste
+        document.getElementById('refreshBtn').addEventListener('click', async () => {
+            const etudiantId = document.getElementById('etudiant').value;
+            if (etudiantId) {
+                await loadBonsList(etudiantId);
+            }
+        });
+        
+        // Charger les bons quand on change d'étudiant
+        document.getElementById('etudiant').addEventListener('change', async (e) => {
+            if (e.target.value) {
+                await loadBonsList(e.target.value);
+            }
+        });
+    </script>
+</body>
+</html>

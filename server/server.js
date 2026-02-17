@@ -7,6 +7,10 @@ const { initDatabase } = require('./config/database');
 const authRoutes = require('./routes/authRoutes');
 const fraisRoutes = require('./routes/fraisRoutes');
 const paiementRoutes = require('./routes/paiementRoutes');
+const paiementAdvancedRoutes = require('./routes/paiementAdvancedRoutes');
+const adminRoutes = require('./routes/adminRoutes');
+const pdfRoutes = require('./routes/pdfRoutes');
+const bonPdfRoutes = require('./routes/bonPdfRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -14,7 +18,7 @@ const PORT = process.env.PORT || 5000;
 // Middleware de sécurité
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: (origin, callback) => callback(null, origin || '*'),
   credentials: true
 }));
 
@@ -26,6 +30,10 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/frais', fraisRoutes);
 app.use('/api/paiements', paiementRoutes);
+app.use('/api/paiements', paiementAdvancedRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/pdf', pdfRoutes);
+app.use('/api/pdf-bon', bonPdfRoutes);
 
 // Route de santé
 app.get('/health', (req, res) => {
@@ -57,7 +65,7 @@ app.use((err, req, res, next) => {
     const db = getDb();
     
     if (db) {
-      const result = db.exec('SELECT name FROM sqlite_master WHERE type="table" AND name="Etudiants"');
+      const result = db.prepare('SELECT name FROM sqlite_master WHERE type=? AND name=?').all('table', 'Etudiants');
       
       if (!result || result.length === 0) {
         console.log('📝 Création des tables et insertion des données...');
